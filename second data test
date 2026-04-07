@@ -1,0 +1,35 @@
+#include <Wire.h>
+#include <Adafruit_MPR121.h>
+
+Adafruit_MPR121 cap = Adafruit_MPR121();
+
+void setup() {
+  Serial.begin(9600);
+  while(!Serial){;}
+
+  if (!cap.begin(0x5A)) {   // 地址用你扫到的 0x5A
+    Serial.println("MPR121 初始化失敗");
+    while (1);
+  }
+
+  Serial.println("初始化成功，等待基線穩定 1 秒...");
+  delay(1000);
+
+  cap.setThresholds(10, 5); // 調整靈敏度（數字小一點更靈敏）
+  Serial.println("開始監測，請看 E0 的數據變化");
+}
+
+void loop() {
+  uint16_t f0 = cap.filteredData(0);   // 濾波後原始數據
+  uint16_t b0 = cap.baselineData(0);   // 自動基線
+  int16_t delta0 = (int16_t)b0 - (int16_t)f0;
+
+  Serial.print("E0: filtered=");
+  Serial.print(f0);
+  Serial.print(" baseline=");
+  Serial.print(b0);
+  Serial.print(" delta=");
+  Serial.println(delta0);
+
+  delay(200); // 每 200ms 打印一次
+}
