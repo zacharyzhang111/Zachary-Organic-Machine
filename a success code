@@ -1,0 +1,203 @@
+/*********************************************************
+MPR121 12通道电容触摸传感器驱动部分
+Designed specifically to work with the MPR121 Breakout in the Adafruit shop
+----> https://www.adafruit.com/products/
+Written by Limor Fried/Ladyada for Adafruit Industries.
+BSD license, all text above must be included in any redistribution
+**********************************************************/
+/**
+* @par Copyright (C): 2010-2019, WuHu XinYi Tech
+* @file         MPR121_Multi_RGB_Strip_Control
+* @author       Cindy & Adafruit Industries
+* @version      V2.1 修复编译报错版
+* @date         2024.xx.xx
+* @brief        MPR121触摸通道2-6分别控制对应引脚的独立RGB灯带
+* @details      触摸通道i对应引脚i的灯带，按下时点亮整条灯带10颗灯珠
+* @par History  
+*
+*/
+
+// 两份代码所需的全部依赖库，缺一不可
+#include <Wire.h>               // MPR121必需的I2C总线库
+#include "Adafruit_MPR121.h"   // MPR121官方驱动库
+#include <Adafruit_NeoPixel.h>  // RGB灯带官方驱动库
+
+// ==================== 宏定义区 修复编译报错 完整兼容两份原始代码 ====================
+// MPR121兼容宏定义（完整保留原始代码）
+#ifndef _BV
+#define _BV(bit) (1 << (bit))
+#endif
+
+// RGB灯带通用配置（完全沿用你原始代码的参数）
+#define LEDS_PER_STRIP 10       // 每条灯带的灯珠数量，固定10颗
+#define STRIP_COLOR_ORDER NEO_RGB + NEO_KHZ800 // 沿用你原始代码的灯带时序与颜色格式
+
+// 【核心修复】用类静态方法替代实例调用，彻底解决strip未声明报错
+// 颜色格式完全沿用你原始代码：绿、红、蓝，对应Color(绿值, 红值, 蓝值)
+#define STRIP_ON_COLOR  Adafruit_NeoPixel::Color(0, 0, 255)  // 点亮时的蓝色
+#define STRIP_OFF_COLOR Adafruit_NeoPixel::Color(0, 0, 0)    // 熄灭时的黑色
+
+// ==================== 全局对象与变量区 ====================
+// MPR121传感器核心对象与状态变量（完整保留原始代码所有逻辑）
+Adafruit_MPR121 cap = Adafruit_MPR121();
+uint16_t lasttouched = 0;  // 上一次扫描的触摸状态
+uint16_t currtouched = 0;  // 当前扫描的触摸状态
+
+// 5条独立灯带对象，一一对应：触摸通道i → Arduino引脚i → 对应灯带
+Adafruit_NeoPixel strip2 = Adafruit_NeoPixel(LEDS_PER_STRIP, 2, STRIP_COLOR_ORDER);
+Adafruit_NeoPixel strip3 = Adafruit_NeoPixel(LEDS_PER_STRIP, 3, STRIP_COLOR_ORDER);
+Adafruit_NeoPixel strip4 = Adafruit_NeoPixel(LEDS_PER_STRIP, 4, STRIP_COLOR_ORDER);
+Adafruit_NeoPixel strip5 = Adafruit_NeoPixel(LEDS_PER_STRIP, 5, STRIP_COLOR_ORDER);
+Adafruit_NeoPixel strip6 = Adafruit_NeoPixel(LEDS_PER_STRIP, 6, STRIP_COLOR_ORDER);
+
+// 灯带批量控制函数封装（简化代码，避免重复逻辑）
+void setStripAll(Adafruit_NeoPixel &strip, uint32_t color) {
+  for(uint8_t i=0; i<LEDS_PER_STRIP; i++) {
+    strip.setPixelColor(i, color); // 循环设置整条灯带的所有灯珠
+  }
+  strip.show(); // 必须调用，颜色配置才会生效
+}
+
+/**
+* Function       setup
+* @brief         初始化配置（合并两份代码的所有初始化逻辑，上电仅执行1次）
+* @param[in]     void
+* @retval        void
+*/
+void setup() {
+  // 串口初始化（完整保留MPR121原始代码的兼容逻辑）
+  Serial.begin(9600);
+  while (!Serial) { // 兼容Leonardo/Micro等开发板，防止串口信息丢失
+    delay(10);
+  }
+  Serial.println("===== MPR121 多灯带独立控制程序启动 =====");
+
+  // ==================== MPR121传感器完整初始化（100%保留原始代码逻辑） ====================
+  Serial.println("Adafruit MPR121 Capacitive Touch sensor test");
+  // MPR121 I2C地址初始化：默认0x5A，可根据硬件接线修改为0x5B/0x5C/0x5D
+  if (!cap.begin(0x5A)) {
+    Serial.println("MPR121 not found, check wiring?");
+    while (1); // 初始化失败则死循环，等待硬件排查
+  }
+  Serial.println("MPR121 found!");
+  // 开启自动校准配置（完整保留原始代码，适配绝大多数触摸场景）
+  Serial.println("Running auto configuration.");
+  cap.setAutoconfig(true);
+  Serial.println("MPR121 Initialization complete.");
+
+  // ==================== 所有RGB灯带完整初始化（沿用你原始代码逻辑） ====================
+  strip2.begin();  strip2.show();  // 初始化引脚2的灯带，上电全灭
+  strip3.begin();  strip3.show();  // 初始化引脚3的灯带，上电全灭
+  strip4.begin();  strip4.show();  // 初始化引脚4的灯带，上电全灭
+  strip5.begin();  strip5.show();  // 初始化引脚5的灯带，上电全灭
+  strip6.begin();  strip6.show();  // 初始化引脚6的灯带，上电全灭
+
+  // 统一设置灯带亮度（0-255，防止电流过大烧板，可自行修改）
+  strip2.setBrightness(120);
+  strip3.setBrightness(120);
+  strip4.setBrightness(120);
+  strip5.setBrightness(120);
+  strip6.setBrightness(120);
+
+  Serial.println("共5条RGB灯带初始化完成，对应引脚2/3/4/5/6");
+  Serial.println("===========================================");
+}
+
+/**
+* Function       loop
+* @brief         主循环（严格遵循你的触发规则，仅触摸按下时点亮对应灯带）
+* @param[in]     void
+* @retval        void
+*/
+void loop() {
+  // ==================== 第一步：读取MPR121当前触摸状态（100%保留原始代码） ====================
+  currtouched = cap.touched();
+
+  // ==================== 第二步：遍历12个触摸通道，核心事件检测 ====================
+  for (uint8_t i=0; i<12; i++) {
+    // -------------------- 【核心触发条件 严格遵循你的要求】仅触摸按下瞬间执行 --------------------
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
+      Serial.print(i); Serial.println(" touched");
+
+      // 【你的核心需求 一一对应】触摸通道i，点亮对应引脚i的整条灯带全部10颗灯珠
+      switch(i) {
+        case 2:
+          setStripAll(strip2, STRIP_ON_COLOR);
+          Serial.println("引脚2的灯带已全部点亮");
+          break;
+        case 3:
+          setStripAll(strip3, STRIP_ON_COLOR);
+          Serial.println("引脚3的灯带已全部点亮");
+          break;
+        case 4:
+          setStripAll(strip4, STRIP_ON_COLOR);
+          Serial.println("引脚4的灯带已全部点亮");
+          break;
+        case 5:
+          setStripAll(strip5, STRIP_ON_COLOR);
+          Serial.println("引脚5的灯带已全部点亮");
+          break;
+        case 6:
+          setStripAll(strip6, STRIP_ON_COLOR);
+          Serial.println("引脚6的灯带已全部点亮");
+          break;
+        default:
+          // 通道0/1/7-11无灯带控制，仅串口输出触摸状态
+          break;
+      }
+    }
+
+    // -------------------- 【触摸释放事件 完整保留原始代码】释放时熄灭对应灯带 --------------------
+    if (!(currtouched & _BV(i)) && (lasttouched & _BV(i)) ) {
+      Serial.print(i); Serial.println(" released");
+
+      // 触摸释放时，熄灭对应引脚的整条灯带（不需要可直接注释掉整个switch代码块）
+      switch(i) {
+        case 2:
+          setStripAll(strip2, STRIP_OFF_COLOR);
+          Serial.println("引脚2的灯带已全部熄灭");
+          break;
+        case 3:
+          setStripAll(strip3, STRIP_OFF_COLOR);
+          Serial.println("引脚3的灯带已全部熄灭");
+          break;
+        case 4:
+          setStripAll(strip4, STRIP_OFF_COLOR);
+          Serial.println("引脚4的灯带已全部熄灭");
+          break;
+        case 5:
+          setStripAll(strip5, STRIP_OFF_COLOR);
+          Serial.println("引脚5的灯带已全部熄灭");
+          break;
+        case 6:
+          setStripAll(strip6, STRIP_OFF_COLOR);
+          Serial.println("引脚6的灯带已全部熄灭");
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  // ==================== 第三步：更新触摸状态（100%保留原始代码逻辑） ====================
+  lasttouched = currtouched;
+
+  // ==================== 完整保留MPR121原始代码的调试功能（默认不执行） ====================
+  // 注释掉下面的return; 即可开启串口原始数据调试输出
+  return;
+
+  // 调试信息：输出16进制触摸状态、滤波采样值、基线校准值
+  Serial.print("\t\t\t\t\t\t\t\t\t\t\t\t\t 0x"); Serial.println(cap.touched(), HEX);
+  Serial.print("Filt: ");
+  for (uint8_t i=0; i<12; i++) {
+    Serial.print(cap.filteredData(i)); Serial.print("\t");
+  }
+  Serial.println();
+  Serial.print("Base: ");
+  for (uint8_t i=0; i<12; i++) {
+    Serial.print(cap.baselineData(i)); Serial.print("\t");
+  }
+  Serial.println();
+
+  delay(100);
+}
