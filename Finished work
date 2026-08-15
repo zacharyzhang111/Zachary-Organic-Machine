@@ -1,0 +1,269 @@
+/*********************************************************
+MPR121 12-Channel Capacitive Touch Sensor Driver
+Designed specifically to work with the MPR121 Breakout in the Adafruit shop
+----> https://www.adafruit.com/products/
+Written by Limor Fried/Ladyada for Adafruit Industries.
+BSD license, all text above must be included in any redistribution
+**********************************************************/
+/**
+* @par Copyright (C): 2010-2019, WuHu XinYi Tech
+* @file         MPR121_Strip_Servo_Buzzer_Full
+* @author       Cindy & Adafruit Industries
+* @version      V4.0
+* @date         2024.xx.xx
+* @brief        MPR121 Ch2-6 control LED strips, Ch8 control buzzer, Ch9 control servo
+* @details      Touch corresponding channel to trigger matched function
+* @par History  
+*
+*/
+
+// All required libraries
+#include <Wire.h>               // I2C bus library for MPR121
+#include "Adafruit_MPR121.h"   // Official MPR121 driver library
+#include <Adafruit_NeoPixel.h>  // Official NeoPixel LED strip library
+#include <Servo.h>              // Official Servo control library
+
+// ==================== Macro Definition ====================
+// MPR121 compatibility macro
+#ifndef _BV
+#define _BV(bit) (1 << (bit))
+#endif
+
+// LED Strip General Configuration
+#define LEDS_PER_STRIP 10       // Number of LEDs per strip, fixed 10
+#define STRIP_COLOR_ORDER NEO_RGB + NEO_KHZ800 // LED strip color format and timing
+#define STRIP_ON_COLOR  Adafruit_NeoPixel::Color(255, 255, 255)  // White for ON state
+#define STRIP_OFF_COLOR Adafruit_NeoPixel::Color(0, 0, 0)    // Black for OFF state
+
+// Servo Configuration
+#define SERVO_CONTROL_PIN 9      // Servo signal pin
+#define SERVO_INIT_ANGLE 90       // Servo initial angle (middle position)
+#define SERVO_DELAY_MS 1000       // Servo action delay time
+
+// Buzzer Configuration
+#define BUZZER_PIN 8              // Buzzer control digital pin
+#define BUZZER_PLAY_LOOP 1        // Loop count for buzzer sound per trigger
+
+// ==================== Global Objects & Variables ====================
+// MPR121 Core Objects & Status Variables
+Adafruit_MPR121 cap = Adafruit_MPR121();
+uint16_t lasttouched = 0;  // Last scanned touch status
+uint16_t currtouched = 0;  // Current scanned touch status
+
+// Independent LED Strip Objects
+Adafruit_NeoPixel strip2 = Adafruit_NeoPixel(LEDS_PER_STRIP, 2, STRIP_COLOR_ORDER);
+Adafruit_NeoPixel strip3 = Adafruit_NeoPixel(LEDS_PER_STRIP, 3, STRIP_COLOR_ORDER);
+Adafruit_NeoPixel strip4 = Adafruit_NeoPixel(LEDS_PER_STRIP, 4, STRIP_COLOR_ORDER);
+Adafruit_NeoPixel strip5 = Adafruit_NeoPixel(LEDS_PER_STRIP, 5, STRIP_COLOR_ORDER);
+Adafruit_NeoPixel strip6 = Adafruit_NeoPixel(LEDS_PER_STRIP, 6, STRIP_COLOR_ORDER);
+
+// Servo Object
+Servo myservo;
+
+// Buzzer Control Flag
+bool buzzerIsActive = false;
+
+// ==================== Function Definition ====================
+// Set all LEDs of a strip to the specified color
+void setStripAll(Adafruit_NeoPixel &strip, uint32_t color) {
+  for(uint8_t i=0; i<LEDS_PER_STRIP; i++) {
+    strip.setPixelColor(i, color);
+  }
+  strip.show();
+}
+
+// Buzzer sound output, fully retain original logic
+void buzzerPlaySound() {
+  unsigned char i;
+  // Output first frequency sound
+  for(i=0;i<80;i++) {
+    digitalWrite(BUZZER_PIN, HIGH);
+    delay(1);
+    digitalWrite(BUZZER_PIN, LOW);
+    delay(1);
+  }
+  // Output second frequency sound
+  for(i=0;i<100;i++) {
+    digitalWrite(BUZZER_PIN, HIGH);
+    delay(2);
+    digitalWrite(BUZZER_PIN, LOW);
+    delay(2);
+  }
+}
+
+/**
+* Function       setup
+* @brief        Initialization configuration, run once on power up
+* @param[in]    void
+* @retval       void
+*/
+void setup() {
+  // Serial port initialization
+  Serial.begin(9600);
+  while (!Serial) {
+    delay(10);
+  }
+  Serial.println("===== MPR121 Full Control Program Start =====");
+
+  // MPR121 Sensor Initialization
+  Serial.println("Adafruit MPR121 Capacitive Touch sensor test");
+  if (!cap.begin(0x5A)) {
+    Serial.println("MPR121 not found, check wiring?");
+    while (1);
+  }
+  Serial.println("MPR121 found!");
+  Serial.println("Running auto configuration.");
+  cap.setAutoconfig(true);
+  Serial.println("MPR121 Initialization complete.");
+
+  // LED Strips Initialization
+  strip2.begin();  strip2.show();
+  strip3.begin();  strip3.show();
+  strip4.begin();  strip4.show();
+  strip5.begin();  strip5.show();
+  strip6.begin();  strip6.show();
+
+  strip2.setBrightness(120);
+  strip3.setBrightness(120);
+  strip4.setBrightness(120);
+  strip5.setBrightness(120);
+  strip6.setBrightness(120);
+  Serial.println("5 LED strips initialized, mapped to pin 2/3/4/5/6");
+
+  // Servo Initialization
+  myservo.attach(SERVO_CONTROL_PIN);
+  myservo.write(SERVO_INIT_ANGLE);
+  delay(SERVO_DELAY_MS);
+  Serial.print("Servo initialized, homed to "); Serial.print(SERVO_INIT_ANGLE); Serial.println(" degree");
+
+  // Buzzer Initialization
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  Serial.println("Buzzer initialized, mapped to pin 8, triggered by Ch8 touch");
+
+  Serial.println("===========================================");
+}
+
+/**
+* Function       loop
+* @brief        Main loop, run repeatedly after setup
+* @param[in]    void
+* @retval       void
+*/
+void loop() {
+  // Read current MPR121 touch status
+  currtouched = cap.touched();
+
+  // Traverse 12 touch channels for event detection
+  for (uint8_t i=0; i<12; i++) {
+    // Touch PRESS Event Trigger
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
+      Serial.print(i); Serial.println(" touched");
+
+      // Channel Action Mapping
+      switch(i) {
+        case 2:
+          setStripAll(strip2, STRIP_ON_COLOR);
+          Serial.println("Strip on pin 2 is fully lit");
+          break;
+        case 3:
+          setStripAll(strip3, STRIP_ON_COLOR);
+          Serial.println("Strip on pin 3 is fully lit");
+          break;
+        case 4:
+          setStripAll(strip4, STRIP_ON_COLOR);
+          Serial.println("Strip on pin 4 is fully lit");
+          break;
+        case 5:
+          setStripAll(strip5, STRIP_ON_COLOR);
+          Serial.println("Strip on pin 5 is fully lit");
+          break;
+        case 6:
+          setStripAll(strip6, STRIP_ON_COLOR);
+          Serial.println("Strip on pin 6 is fully lit");
+          break;
+        case 8:
+          Serial.println("Ch8 triggered, buzzer activated");
+          buzzerIsActive = true;
+          break;
+        case 9:
+          Serial.println("Ch9 triggered, servo start rotating");
+          myservo.write(0);
+          delay(SERVO_DELAY_MS);
+          myservo.write(180);
+          delay(SERVO_DELAY_MS);
+          myservo.write(SERVO_INIT_ANGLE);
+          delay(SERVO_DELAY_MS);
+          Serial.println("Servo action completed, homed");
+          break;
+        default:
+          break;
+      }
+    }
+
+    // Touch RELEASE Event Trigger
+    if (!(currtouched & _BV(i)) && (lasttouched & _BV(i)) ) {
+      Serial.print(i); Serial.println(" released");
+
+      switch(i) {
+        case 2:
+          setStripAll(strip2, STRIP_OFF_COLOR);
+          Serial.println("Strip on pin 2 is fully off");
+          break;
+        case 3:
+          setStripAll(strip3, STRIP_OFF_COLOR);
+          Serial.println("Strip on pin 3 is fully off");
+          break;
+        case 4:
+          setStripAll(strip4, STRIP_OFF_COLOR);
+          Serial.println("Strip on pin 4 is fully off");
+          break;
+        case 5:
+          setStripAll(strip5, STRIP_OFF_COLOR);
+          Serial.println("Strip on pin 5 is fully off");
+          break;
+        case 6:
+          setStripAll(strip6, STRIP_OFF_COLOR);
+          Serial.println("Strip on pin 6 is fully off");
+          break;
+        case 8:
+          Serial.println("Ch8 released, buzzer stopped");
+          buzzerIsActive = false;
+          digitalWrite(BUZZER_PIN, LOW);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  // Update touch status for next loop comparison
+  lasttouched = currtouched;
+
+  // Buzzer loop playback control, non-blocking
+  if(buzzerIsActive) {
+    for(uint8_t loopCnt=0; loopCnt<BUZZER_PLAY_LOOP; loopCnt++) {
+      if(!buzzerIsActive) break;
+      buzzerPlaySound();
+    }
+  }
+
+  // MPR121 Debug Mode (disabled by default)
+  // Comment out the return below to enable debug serial output
+  return;
+
+  // Debug Output: Raw touch data, filtered value, baseline value
+  Serial.print("\t\t\t\t\t\t\t\t\t\t\t\t\t 0x"); Serial.println(cap.touched(), HEX);
+  Serial.print("Filt: ");
+  for (uint8_t i=0; i<12; i++) {
+    Serial.print(cap.filteredData(i)); Serial.print("\t");
+  }
+  Serial.println();
+  Serial.print("Base: ");
+  for (uint8_t i=0; i<12; i++) {
+    Serial.print(cap.baselineData(i)); Serial.print("\t");
+  }
+  Serial.println();
+
+  delay(100);
+}
