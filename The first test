@@ -12,7 +12,6 @@ void loop() {
   for (uint8_t i = 0; i < 12; i++) {
     uint16_t data = readRegister16(MPR121_FILTDATA_0L + i*2);
 
-    // 阈值判断 (你可以根据实际情况调整 3)
     bool isTouched = (data < 3);
 
     Serial.print("Electrode ");
