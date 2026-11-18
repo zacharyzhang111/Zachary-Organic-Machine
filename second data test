@@ -7,21 +7,21 @@ void setup() {
   Serial.begin(9600);
   while(!Serial){;}
 
-  if (!cap.begin(0x5A)) {   // 地址用你扫到的 0x5A
-    Serial.println("MPR121 初始化失敗");
+  if (!cap.begin(0x5A)) {   // Use detected I2C address 0x5A
+    Serial.println("MPR121 initialization failed");
     while (1);
   }
 
-  Serial.println("初始化成功，等待基線穩定 1 秒...");
+  Serial.println("Initialized. Waiting 1s for baseline stabilization...");
   delay(1000);
 
-  cap.setThresholds(10, 5); // 調整靈敏度（數字小一點更靈敏）
-  Serial.println("開始監測，請看 E0 的數據變化");
+  cap.setThresholds(10, 5); // Set sensitivity (lower values = more sensitive)
+  Serial.println("Monitoring started. Watch E0 data changes:");
 }
 
 void loop() {
-  uint16_t f0 = cap.filteredData(0);   // 濾波後原始數據
-  uint16_t b0 = cap.baselineData(0);   // 自動基線
+  uint16_t f0 = cap.filteredData(0);   // Filtered raw data
+  uint16_t b0 = cap.baselineData(0);   // Auto-baseline data
   int16_t delta0 = (int16_t)b0 - (int16_t)f0;
 
   Serial.print("E0: filtered=");
@@ -31,5 +31,5 @@ void loop() {
   Serial.print(" delta=");
   Serial.println(delta0);
 
-  delay(200); // 每 200ms 打印一次
+  delay(200); // Print every 200ms
 }
