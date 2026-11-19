@@ -1,36 +1,18 @@
-/*********************************************************
-MPR121 12-Channel Capacitive Touch Sensor Driver
-Designed specifically to work with the MPR121 Breakout in the Adafruit shop
-----> https://www.adafruit.com/products/
-Written by Limor Fried/Ladyada for Adafruit Industries.
-BSD license, all text above must be included in any redistribution
-**********************************************************/
-
-/* MPR121 Control */
-
-// Libraries
-#include <Wire.h>
-#include "Adafruit_MPR121.h"
-#include <Adafruit_NeoPixel.h>
 #include <Servo.h>
 
-// Definitions
 #ifndef _BV
 #define _BV(bit) (1 << (bit))
 #endif
 
-// LED Settings
+//Settings
 #define LEDS_PER_STRIP 10
 #define STRIP_COLOR_ORDER NEO_RGB + NEO_KHZ800
 #define STRIP_ON_COLOR  Adafruit_NeoPixel::Color(255, 255, 255)
 #define STRIP_OFF_COLOR Adafruit_NeoPixel::Color(0, 0, 0)
-
-// Servo Settings
 #define SERVO_CONTROL_PIN 9
 #define SERVO_INIT_ANGLE 90
-#define SERVO_DELAY_MS 1000
-
-// Buzzer Settings
+#define SERVO_INIT_ANGLE 90
+#define SERVO_DELAY_MS 100
 #define BUZZER_PIN 8
 #define BUZZER_PLAY_LOOP 1
 
@@ -89,10 +71,10 @@ void setup() {
   while (!Serial) {
     delay(10);
   }
-  Serial.println("===== MPR121 Full Control Program Start =====");
+  Serial.println(" MPR121 Control Program Start ");
 
   // Sensor Setup
-  Serial.println("Adafruit MPR121 Capacitive Touch sensor test");
+  Serial.println("MPR121 Capacitive Touch sensor test");
   if (!cap.begin(0x5A)) {
     Serial.println("MPR121 not found, check wiring?");
     while (1);
@@ -130,7 +112,6 @@ void setup() {
   digitalWrite(BUZZER_PIN, LOW);
   Serial.println("Buzzer initialized, mapped to pin 8, triggered by Ch8 touch");
 
-  Serial.println("===========================================");
 }
 
 // Main Loop
@@ -269,10 +250,6 @@ void loop() {
     Serial.print(cap.baselineData(i));
     Serial.print("\t");
   }
-  Serial.println();
-
-  delay(100);
-}
   Serial.println();
 
   delay(100);
