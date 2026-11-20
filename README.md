@@ -1,6 +1,13 @@
+
 # Zachary-code
-a programme of interactive design
+
+*A programme of interactive design*
+
 I developed an Arduino program using the MPR121 capacitive touch sensor to control LED strips, a buzzer and a servo. Each touch channel was assigned a specific response: touching the mushrooms triggered lighting effects, sound feedback or mechanical movement. The program translated physical contact into real-time electronic responses, creating an interactive connection between visitors and the installation.
+
+## Arduino Code
+
+```cpp
 #include <Wire.h>
 #include "Adafruit_MPR121.h"
 #include <Adafruit_NeoPixel.h>
@@ -17,10 +24,10 @@ I developed an Arduino program using the MPR121 capacitive touch sensor to contr
 #define offColor Adafruit_NeoPixel::Color(0, 0, 0)
 #define servoPin 9
 #define servoAngle 90
-#define servoAngle 90
 #define servoDelay 100
 #define buzzerPin 8
 #define buzzerLoop 1
+#define debugMode false
 
 // Global Objects
 Adafruit_MPR121 touchSensor = Adafruit_MPR121();
@@ -40,28 +47,26 @@ Servo myServo;
 // Buzzer Flag
 bool buzzerActive = false;
 
-// Functions
-
 // LED Output
-void stripOutput(Adafruit_NeoPixel &strip, uint32_t color) {
-  for(uint8_t i=0; i<ledsStrip; i++) {
-    strip.setPixelColor(i, color);
+void stripOutput(Adafruit_NeoPixel &ledStrip, uint32_t ledColor) {
+  for (uint8_t ledIndex = 0; ledIndex < ledsStrip; ledIndex++) {
+    ledStrip.setPixelColor(ledIndex, ledColor);
   }
-  strip.show();
+  ledStrip.show();
 }
 
 // Sound Output
 void buzzerSound() {
-  unsigned char i;
+  unsigned char pulseIndex;
 
-  for(i=0; i<80; i++) {
+  for (pulseIndex = 0; pulseIndex < 80; pulseIndex++) {
     digitalWrite(buzzerPin, HIGH);
     delay(1);
     digitalWrite(buzzerPin, LOW);
     delay(1);
   }
 
-  for(i=0; i<100; i++) {
+  for (pulseIndex = 0; pulseIndex < 100; pulseIndex++) {
     digitalWrite(buzzerPin, HIGH);
     delay(2);
     digitalWrite(buzzerPin, LOW);
@@ -77,25 +82,38 @@ void setup() {
   while (!Serial) {
     delay(10);
   }
-  Serial.println(" MPR121 Control Program Start ");
+  Serial.println("MPR121 Control Program Start");
 
   // Sensor Setup
-  Serial.println("MPR121 Capacitive Touch sensor test");
+  Serial.println("MPR121 Capacitive Touch Sensor Test");
+
   if (!touchSensor.begin(0x5A)) {
     Serial.println("MPR121 not found, check wiring?");
     while (1);
   }
+
   Serial.println("MPR121 found!");
   Serial.println("Running auto configuration.");
+
   touchSensor.setAutoconfig(true);
+
   Serial.println("MPR121 Initialization complete.");
 
   // LED Setup
-  strip2.begin();  strip2.show();
-  strip3.begin();  strip3.show();
-  strip4.begin();  strip4.show();
-  strip5.begin();  strip5.show();
-  strip6.begin();  strip6.show();
+  strip2.begin();
+  strip2.show();
+
+  strip3.begin();
+  strip3.show();
+
+  strip4.begin();
+  strip4.show();
+
+  strip5.begin();
+  strip5.show();
+
+  strip6.begin();
+  strip6.show();
 
   strip2.setBrightness(120);
   strip3.setBrightness(120);
@@ -109,6 +127,7 @@ void setup() {
   myServo.attach(servoPin);
   myServo.write(servoAngle);
   delay(servoDelay);
+
   Serial.print("Servo initialized, homed to ");
   Serial.print(servoAngle);
   Serial.println(" degree");
@@ -116,8 +135,8 @@ void setup() {
   // Buzzer Setup
   pinMode(buzzerPin, OUTPUT);
   digitalWrite(buzzerPin, LOW);
-  Serial.println("Buzzer initialized, mapped to pin 8, triggered by Ch8 touch");
 
+  Serial.println("Buzzer initialized, mapped to pin 8, triggered by Ch8 touch");
 }
 
 // Main Loop
@@ -127,15 +146,18 @@ void loop() {
   currentTouch = touchSensor.touched();
 
   // Channel Scan
-  for (uint8_t i=0; i<12; i++) {
+  for (uint8_t channelIndex = 0; channelIndex < 12; channelIndex++) {
 
     // Touch Press
-    if ((currentTouch & _BV(i)) && !(lastTouch & _BV(i))) {
-      Serial.print(i);
+    if ((currentTouch & _BV(channelIndex)) &&
+        !(lastTouch & _BV(channelIndex))) {
+
+      Serial.print(channelIndex);
       Serial.println(" touched");
 
       // Channel Mapping
-      switch(i) {
+      switch (channelIndex) {
+
         case 2:
           stripOutput(strip2, onColor);
           Serial.println("Strip on pin 2 is fully lit");
@@ -168,12 +190,16 @@ void loop() {
 
         case 9:
           Serial.println("Ch9 triggered, servo start rotating");
+
           myServo.write(0);
           delay(servoDelay);
+
           myServo.write(180);
           delay(servoDelay);
+
           myServo.write(servoAngle);
           delay(servoDelay);
+
           Serial.println("Servo action completed, homed");
           break;
 
@@ -183,12 +209,15 @@ void loop() {
     }
 
     // Touch Release
-    if (!(currentTouch & _BV(i)) && (lastTouch & _BV(i))) {
-      Serial.print(i);
+    if (!(currentTouch & _BV(channelIndex)) &&
+        (lastTouch & _BV(channelIndex))) {
+
+      Serial.print(channelIndex);
       Serial.println(" released");
 
       // Channel Mapping
-      switch(i) {
+      switch (channelIndex) {
+
         case 2:
           stripOutput(strip2, offColor);
           Serial.println("Strip on pin 2 is fully off");
@@ -216,6 +245,7 @@ void loop() {
 
         case 8:
           Serial.println("Ch8 released, buzzer stopped");
+
           buzzerActive = false;
           digitalWrite(buzzerPin, LOW);
           break;
@@ -230,33 +260,41 @@ void loop() {
   lastTouch = currentTouch;
 
   // Sound Control
-  if(buzzerActive) {
-    for(uint8_t loopCount=0; loopCount<buzzerLoop; loopCount++) {
-      if(!buzzerActive) break;
+  if (buzzerActive) {
+
+    for (uint8_t loopCount = 0; loopCount < buzzerLoop; loopCount++) {
+
+      if (!buzzerActive) break;
+
       buzzerSound();
     }
   }
 
-  // Debug Mode
-  return;
-
   // Debug Output
-  Serial.print("\t\t\t\t\t\t\t\t\t\t\t\t\t 0x");
-  Serial.println(touchSensor.touched(), HEX);
+  if (debugMode) {
 
-  Serial.print("Filt: ");
-  for (uint8_t i=0; i<12; i++) {
-    Serial.print(touchSensor.filteredData(i));
-    Serial.print("\t");
+    Serial.print("Touch: 0x");
+    Serial.println(touchSensor.touched(), HEX);
+
+    Serial.print("Filt: ");
+
+    for (uint8_t dataIndex = 0; dataIndex < 12; dataIndex++) {
+      Serial.print(touchSensor.filteredData(dataIndex));
+      Serial.print("\t");
+    }
+
+    Serial.println();
+
+    Serial.print("Base: ");
+
+    for (uint8_t dataIndex = 0; dataIndex < 12; dataIndex++) {
+      Serial.print(touchSensor.baselineData(dataIndex));
+      Serial.print("\t");
+    }
+
+    Serial.println();
+
+    delay(100);
   }
-  Serial.println();
-
-  Serial.print("Base: ");
-  for (uint8_t i=0; i<12; i++) {
-    Serial.print(touchSensor.baselineData(i));
-    Serial.print("\t");
-  }
-  Serial.println();
-
-  delay(100);
 }
+```
